@@ -1,14 +1,68 @@
 const std = @import("std");
 const math = std.math;
 const rand = std.rand;
+const PlaydateAllocator = @import("memory.zig").PlaydateAllocator;
 
-const rl = @import("raylib");
-const rlm = @import("raylib-math");
-const Vector2 = rl.Vector2;
+const pdapi = @import("playdate_api_definitions.zig");
+
+pub inline fn isButtonDown(pd: *pdapi.PlaydateAPI, button: pdapi.PDButtons) bool {
+    var down: pdapi.PDButtons = 0;
+
+    pd.system.getButtonState(&down, null, null);
+
+    return down & button != 0;
+}
+
+pub inline fn isButtonPressed(pd: *pdapi.PlaydateAPI, button: pdapi.PDButtons) bool {
+    var pressed: pdapi.PDButtons = 0;
+
+    pd.system.getButtonState(null, &pressed, null);
+
+    return pressed & button != 0;
+}
+
+const Vector2 = struct {
+    x: f32,
+    y: f32,
+
+    pub fn init(x: f32, y: f32) Vector2 {
+        return .{ .x = x, .y = y };
+    }
+
+    pub fn scale(self: @This(), s: f32) Vector2 {
+        return .{ .x = self.x * s, .y = self.y * s };
+    }
+
+    pub fn rotate(self: @This(), angle: f32) Vector2 {
+        const c = math.cos(angle);
+        const s = math.sin(angle);
+        return .{
+            .x = self.x * c - self.y * s,
+            .y = self.x * s + self.y * c,
+        };
+    }
+
+    pub fn add(self: @This(), other: Vector2) Vector2 {
+        return .{ .x = self.x + other.x, .y = self.y + other.y };
+    }
+
+    pub fn subtract(self: @This(), other: Vector2) Vector2 {
+        return .{ .x = self.x - other.x, .y = self.y - other.y };
+    }
+
+    pub fn normalize(self: @This()) Vector2 {
+        const len = math.sqrt(self.x * self.x + self.y * self.y);
+        return .{ .x = self.x / len, .y = self.y / len };
+    }
+
+    pub fn distance(self: @This(), other: Vector2) f32 {
+        return math.sqrt((self.x - other.x) * (self.x - other.x) + (self.y - other.y) * (self.y - other.y));
+    }
+};
 
 const THICKNESS = 2.5;
-const SCALE = 38.0;
-const SIZE = Vector2.init(640 * 2, 480 * 2);
+const SCALE = 9.0;
+const SIZE = Vector2.init(pdapi.LCD_COLUMNS, pdapi.LCD_ROWS);
 
 const Ship = struct {
     pos: Vector2,
@@ -119,29 +173,25 @@ const State = struct {
     bloop: usize = 0,
     frame: usize = 0,
 };
-var state: State = undefined;
 
-const Sound = struct {
-    bloopLo: rl.Sound,
-    bloopHi: rl.Sound,
-    shoot: rl.Sound,
-    thrust: rl.Sound,
-    asteroid: rl.Sound,
-    explode: rl.Sound,
-};
-var sound: Sound = undefined;
+// const Sound = struct {
+//     bloopLo: rl.Sound,
+//     bloopHi: rl.Sound,
+//     shoot: rl.Sound,
+//     thrust: rl.Sound,
+//     asteroid: rl.Sound,
+//     explode: rl.Sound,
+// };
+// var sound: Sound = undefined;
 
-fn drawLines(org: Vector2, scale: f32, rot: f32, points: []const Vector2, connect: bool) void {
+fn drawLines(g: *const pdapi.PlaydateGraphics, org: Vector2, scale: f32, rot: f32, points: []const Vector2, connect: bool) void {
     const Transformer = struct {
         org: Vector2,
         scale: f32,
         rot: f32,
 
         fn apply(self: @This(), p: Vector2) Vector2 {
-            return rlm.vector2Add(
-                rlm.vector2Scale(rlm.vector2Rotate(p, self.rot), self.scale),
-                self.org,
-            );
+            return p.rotate(self.rot).scale(self.scale).add(self.org);
         }
     };
 
@@ -153,16 +203,14 @@ fn drawLines(org: Vector2, scale: f32, rot: f32, points: []const Vector2, connec
 
     const bound = if (connect) points.len else (points.len - 1);
     for (0..bound) |i| {
-        rl.drawLineEx(
-            t.apply(points[i]),
-            t.apply(points[(i + 1) % points.len]),
-            THICKNESS,
-            rl.Color.white,
-        );
+        const v0 = t.apply(points[i]);
+        const v1 = t.apply(points[(i + 1) % points.len]);
+
+        g.drawLine(@intFromFloat(v0.x), @intFromFloat(v0.y), @intFromFloat(v1.x), @intFromFloat(v1.y), math.ceil(THICKNESS), @intFromEnum(pdapi.LCDSolidColor.ColorWhite));
     }
 }
 
-fn drawNumber(n: usize, pos: Vector2) !void {
+fn drawNumber(g: *const pdapi.PlaydateGraphics, n: usize, pos: Vector2) !void {
     const NUMBER_LINES = [10][]const [2]f32{
         &.{ .{ 0, 0 }, .{ 1, 0 }, .{ 1, 1 }, .{ 0, 1 }, .{ 0, 0 } },
         &.{ .{ 0.5, 0 }, .{ 0.5, 1 } },
@@ -196,7 +244,7 @@ fn drawNumber(n: usize, pos: Vector2) !void {
             try points.append(Vector2.init(p[0] - 0.5, (1.0 - p[1]) - 0.5));
         }
 
-        drawLines(pos2, SCALE * 0.8, 0, points.slice(), false);
+        drawLines(g, pos2, SCALE * 0.8, 0, points.slice(), false);
         pos2.x -= SCALE;
         val /= 10;
         if (val == 0) {
@@ -246,7 +294,7 @@ const AsteroidSize = enum {
     }
 };
 
-fn drawAsteroid(pos: Vector2, size: AsteroidSize, seed: u64) !void {
+fn drawAsteroid(g: *const pdapi.PlaydateGraphics, pos: Vector2, size: AsteroidSize, seed: u64) !void {
     var prng = rand.Xoshiro256.init(seed);
     var random = prng.random();
 
@@ -261,25 +309,19 @@ fn drawAsteroid(pos: Vector2, size: AsteroidSize, seed: u64) !void {
 
         const angle: f32 = (@as(f32, @floatFromInt(i)) * (math.tau / @as(f32, @floatFromInt(n)))) + (math.pi * 0.125 * random.float(f32));
         try points.append(
-            rlm.vector2Scale(Vector2.init(math.cos(angle), math.sin(angle)), radius),
+            Vector2.init(math.cos(angle), math.sin(angle)).scale(radius),
         );
     }
 
-    drawLines(pos, size.size(), 0.0, points.slice(), true);
+    drawLines(g, pos, size.size(), 0.0, points.slice(), true);
 }
 
-fn splatLines(pos: Vector2, count: usize) !void {
+fn splatLines(state: *State, pos: Vector2, count: usize) !void {
     for (0..count) |_| {
         const angle = math.tau * state.rand.float(f32);
         try state.particles.append(.{
-            .pos = rlm.vector2Add(
-                pos,
-                Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3),
-            ),
-            .vel = rlm.vector2Scale(
-                Vector2.init(math.cos(angle), math.sin(angle)),
-                2.0 * state.rand.float(f32),
-            ),
+            .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
+            .vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(2.0 * state.rand.float(f32)),
             .ttl = 3.0 + state.rand.float(f32),
             .values = .{
                 .LINE = .{
@@ -291,18 +333,12 @@ fn splatLines(pos: Vector2, count: usize) !void {
     }
 }
 
-fn splatDots(pos: Vector2, count: usize) !void {
+fn splatDots(state: *State, pos: Vector2, count: usize) !void {
     for (0..count) |_| {
         const angle = math.tau * state.rand.float(f32);
         try state.particles.append(.{
-            .pos = rlm.vector2Add(
-                pos,
-                Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3),
-            ),
-            .vel = rlm.vector2Scale(
-                Vector2.init(math.cos(angle), math.sin(angle)),
-                2.0 + 4.0 * state.rand.float(f32),
-            ),
+            .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
+            .vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(2.0 + 4.0 * state.rand.float(f32)),
             .ttl = 0.5 + (0.4 * state.rand.float(f32)),
             .values = .{
                 .DOT = .{
@@ -313,20 +349,20 @@ fn splatDots(pos: Vector2, count: usize) !void {
     }
 }
 
-fn hitAsteroid(a: *Asteroid, impact: ?Vector2) !void {
-    rl.playSound(sound.asteroid);
+fn hitAsteroid(state: *State, a: *Asteroid, impact: ?Vector2) !void {
+    // rl.playSound(sound.asteroid);
 
     state.score += a.size.score();
     a.remove = true;
 
-    try splatDots(a.pos, 10);
+    try splatDots(state, a.pos, 10);
 
     if (a.size == .SMALL) {
         return;
     }
 
     for (0..2) |_| {
-        const dir = rlm.vector2Normalize(a.vel);
+        const dir = a.vel.normalize();
         const size: AsteroidSize = switch (a.size) {
             .BIG => .MEDIUM,
             .MEDIUM => .SMALL,
@@ -335,23 +371,17 @@ fn hitAsteroid(a: *Asteroid, impact: ?Vector2) !void {
 
         try state.asteroids_queue.append(.{
             .pos = a.pos,
-            .vel = rlm.vector2Add(
-                rlm.vector2Scale(
-                    dir,
-                    a.size.velocityScale() * 2.2 * state.rand.float(f32),
-                ),
-                if (impact) |i| rlm.vector2Scale(i, 0.7) else Vector2.init(0, 0),
-            ),
+            .vel = dir.scale(a.size.velocityScale() * 2.2 * state.rand.float(f32)).add(if (impact) |i| i.scale(0.7) else Vector2.init(0, 0)),
             .size = size,
             .seed = state.rand.int(u64),
         });
     }
 }
 
-fn update() !void {
+fn update(state: *State, api: *pdapi.PlaydateAPI) !void {
     if (state.reset) {
         state.reset = false;
-        try resetGame();
+        try resetGame(state);
     }
 
     if (!state.ship.isDead()) {
@@ -359,54 +389,48 @@ fn update() !void {
         const ROT_SPEED = 2;
         const SHIP_SPEED = 24;
 
-        if (rl.isKeyDown(.key_a)) {
+        if (isButtonDown(api, pdapi.BUTTON_LEFT)) {
             state.ship.rot -= state.delta * math.tau * ROT_SPEED;
         }
 
-        if (rl.isKeyDown(.key_d)) {
+        if (isButtonDown(api, pdapi.BUTTON_RIGHT)) {
             state.ship.rot += state.delta * math.tau * ROT_SPEED;
         }
 
         const dirAngle = state.ship.rot + (math.pi * 0.5);
         const shipDir = Vector2.init(math.cos(dirAngle), math.sin(dirAngle));
 
-        if (rl.isKeyDown(.key_w)) {
-            state.ship.vel = rlm.vector2Add(
-                state.ship.vel,
-                rlm.vector2Scale(shipDir, state.delta * SHIP_SPEED),
-            );
+        if (isButtonDown(api, pdapi.BUTTON_UP)) {
+            state.ship.vel = shipDir.scale(state.delta * SHIP_SPEED).add(state.ship.vel);
 
             if (state.frame % 2 == 0) {
-                rl.playSound(sound.thrust);
+                // rl.playSound(sound.thrust);
             }
         }
 
         const DRAG = 0.015;
-        state.ship.vel = rlm.vector2Scale(state.ship.vel, 1.0 - DRAG);
-        state.ship.pos = rlm.vector2Add(state.ship.pos, state.ship.vel);
+        state.ship.vel = state.ship.vel.scale(1.0 - DRAG);
+        state.ship.pos = state.ship.pos.add(state.ship.vel);
         state.ship.pos = Vector2.init(
             @mod(state.ship.pos.x, SIZE.x),
             @mod(state.ship.pos.y, SIZE.y),
         );
 
-        if (rl.isKeyPressed(.key_space) or rl.isMouseButtonPressed(.mouse_button_left)) {
+        if (isButtonPressed(api, pdapi.BUTTON_A)) {
             try state.projectiles.append(.{
-                .pos = rlm.vector2Add(
-                    state.ship.pos,
-                    rlm.vector2Scale(shipDir, SCALE * 0.55),
-                ),
-                .vel = rlm.vector2Scale(shipDir, 10.0),
+                .pos = state.ship.pos.add(shipDir.scale(SCALE * 0.55)),
+                .vel = shipDir.scale(10.0),
                 .ttl = 2.0,
                 .spawn = state.now,
             });
-            rl.playSound(sound.shoot);
+            // rl.playSound(sound.shoot);
 
-            state.ship.vel = rlm.vector2Add(state.ship.vel, rlm.vector2Scale(shipDir, -0.5));
+            state.ship.vel = state.ship.vel.add(shipDir.scale(-0.5));
         }
 
         // check for projectile v. ship collision
         for (state.projectiles.items) |*p| {
-            if (!p.remove and (state.now - p.spawn) > 0.15 and rlm.vector2Distance(state.ship.pos, p.pos) < (SCALE * 0.7)) {
+            if (!p.remove and (state.now - p.spawn) > 0.15 and state.ship.pos.distance(p.pos) < (SCALE * 0.7)) {
                 p.remove = true;
                 state.ship.deathTime = state.now;
             }
@@ -423,33 +447,33 @@ fn update() !void {
         var i: usize = 0;
         while (i < state.asteroids.items.len) {
             var a = &state.asteroids.items[i];
-            a.pos = rlm.vector2Add(a.pos, a.vel);
+            a.pos = a.pos.add(a.vel);
             a.pos = Vector2.init(
                 @mod(a.pos.x, SIZE.x),
                 @mod(a.pos.y, SIZE.y),
             );
 
             // check for ship v. asteroid collision
-            if (!state.ship.isDead() and rlm.vector2Distance(a.pos, state.ship.pos) < a.size.size() * a.size.collisionScale()) {
-                state.ship.deathTime = state.now;
-                try hitAsteroid(a, rlm.vector2Normalize(state.ship.vel));
-            }
+            // if (!state.ship.isDead() and a.pos.distance(state.ship.pos) < a.size.size() * a.size.collisionScale()) {
+            //     state.ship.deathTime = state.now;
+            //     try hitAsteroid(state, a, state.ship.vel.normalize());
+            // }
 
-            // check for alien v. asteroid collision
-            for (state.aliens.items) |*l| {
-                if (!l.remove and rlm.vector2Distance(a.pos, l.pos) < a.size.size() * a.size.collisionScale()) {
-                    l.remove = true;
-                    try hitAsteroid(a, rlm.vector2Normalize(state.ship.vel));
-                }
-            }
+            // // check for alien v. asteroid collision
+            // for (state.aliens.items) |*l| {
+            //     if (!l.remove and a.pos.distance(l.pos) < a.size.size() * a.size.collisionScale()) {
+            //         l.remove = true;
+            //         try hitAsteroid(state, a, state.ship.vel.normalize());
+            //     }
+            // }
 
-            // check for projectile v. asteroid collision
-            for (state.projectiles.items) |*p| {
-                if (!p.remove and rlm.vector2Distance(a.pos, p.pos) < a.size.size() * a.size.collisionScale()) {
-                    p.remove = true;
-                    try hitAsteroid(a, rlm.vector2Normalize(p.vel));
-                }
-            }
+            // // check for projectile v. asteroid collision
+            // for (state.projectiles.items) |*p| {
+            //     if (!p.remove and a.pos.distance(p.pos) < a.size.size() * a.size.collisionScale()) {
+            //         p.remove = true;
+            //         try hitAsteroid(state, a, p.vel.normalize());
+            //     }
+            // }
 
             if (a.remove) {
                 _ = state.asteroids.swapRemove(i);
@@ -463,7 +487,7 @@ fn update() !void {
         var i: usize = 0;
         while (i < state.particles.items.len) {
             var p = &state.particles.items[i];
-            p.pos = rlm.vector2Add(p.pos, p.vel);
+            p.pos = p.pos.add(p.vel);
             p.pos = Vector2.init(
                 @mod(p.pos.x, SIZE.x),
                 @mod(p.pos.y, SIZE.y),
@@ -482,7 +506,7 @@ fn update() !void {
         var i: usize = 0;
         while (i < state.projectiles.items.len) {
             var p = &state.projectiles.items[i];
-            p.pos = rlm.vector2Add(p.pos, p.vel);
+            p.pos = p.pos.add(p.vel);
             p.pos = Vector2.init(
                 @mod(p.pos.x, SIZE.x),
                 @mod(p.pos.y, SIZE.y),
@@ -504,14 +528,14 @@ fn update() !void {
 
             // check for projectile v. alien collision
             for (state.projectiles.items) |*p| {
-                if (!p.remove and (state.now - p.spawn) > 0.15 and rlm.vector2Distance(a.pos, p.pos) < a.size.collisionSize()) {
+                if (!p.remove and (state.now - p.spawn) > 0.15 and a.pos.distance(p.pos) < a.size.collisionSize()) {
                     p.remove = true;
                     a.remove = true;
                 }
             }
 
             // check alien v. ship
-            if (!a.remove and rlm.vector2Distance(a.pos, state.ship.pos) < a.size.collisionSize()) {
+            if (!a.remove and a.pos.distance(state.ship.pos) < a.size.collisionSize()) {
                 a.remove = true;
                 state.ship.deathTime = state.now;
             }
@@ -523,7 +547,7 @@ fn update() !void {
                     a.dir = Vector2.init(math.cos(angle), math.sin(angle));
                 }
 
-                a.pos = rlm.vector2Add(a.pos, rlm.vector2Scale(a.dir, a.size.speed()));
+                a.pos = a.pos.add(a.dir.scale(a.size.speed()));
                 a.pos = Vector2.init(
                     @mod(a.pos.x, SIZE.x),
                     @mod(a.pos.y, SIZE.y),
@@ -531,24 +555,21 @@ fn update() !void {
 
                 if ((state.now - a.lastShot) > a.size.shotTime()) {
                     a.lastShot = state.now;
-                    const dir = rlm.vector2Normalize(rlm.vector2Subtract(state.ship.pos, a.pos));
+                    const dir = state.ship.pos.subtract(a.pos).normalize();
                     try state.projectiles.append(.{
-                        .pos = rlm.vector2Add(
-                            a.pos,
-                            rlm.vector2Scale(dir, SCALE * 0.55),
-                        ),
-                        .vel = rlm.vector2Scale(dir, 6.0),
+                        .pos = a.pos.add(dir.scale(SCALE * 0.55)),
+                        .vel = dir.scale(6.0),
                         .ttl = 2.0,
                         .spawn = state.now,
                     });
-                    rl.playSound(sound.shoot);
+                    // rl.playSound(sound.shoot);
                 }
             }
 
             if (a.remove) {
-                rl.playSound(sound.asteroid);
-                try splatDots(a.pos, 15);
-                try splatLines(a.pos, 4);
+                // rl.playSound(sound.asteroid);
+                try splatDots(state, a.pos, 15);
+                try splatLines(state, a.pos, 4);
                 _ = state.aliens.swapRemove(i);
             } else {
                 i += 1;
@@ -557,13 +578,13 @@ fn update() !void {
     }
 
     if (state.ship.deathTime == state.now) {
-        rl.playSound(sound.explode);
-        try splatDots(state.ship.pos, 20);
-        try splatLines(state.ship.pos, 5);
+        // rl.playSound(sound.explode);
+        try splatDots(state, state.ship.pos, 20);
+        try splatLines(state, state.ship.pos, 5);
     }
 
     if (state.ship.isDead() and (state.now - state.ship.deathTime) > 3.0) {
-        try resetStage();
+        try resetStage(state);
     }
 
     const bloopIntensity = @min(@as(usize, @intFromFloat(state.now - state.stageStart)) / 15, 3);
@@ -578,12 +599,12 @@ fn update() !void {
     }
 
     if (!state.ship.isDead() and state.bloop != state.lastBloop) {
-        rl.playSound(if (state.bloop % 2 == 1) sound.bloopHi else sound.bloopLo);
+        // rl.playSound(if (state.bloop % 2 == 1) sound.bloopHi else sound.bloopLo);
     }
     state.lastBloop = state.bloop;
 
     if (state.asteroids.items.len == 0 and state.aliens.items.len == 0) {
-        try resetAsteroids();
+        try resetAsteroids(state);
     }
 
     if ((state.lastScore / 5000) != (state.score / 5000)) {
@@ -611,13 +632,13 @@ fn update() !void {
     state.lastScore = state.score;
 }
 
-fn drawAlien(pos: Vector2, size: AlienSize) void {
+fn drawAlien(g: *const pdapi.PlaydateGraphics, pos: Vector2, size: AlienSize) void {
     const scale: f32 = switch (size) {
         .BIG => 1.0,
         .SMALL => 0.5,
     };
 
-    drawLines(pos, SCALE * scale, 0, &.{
+    drawLines(g, pos, SCALE * scale, 0, &.{
         Vector2.init(-0.5, 0.0),
         Vector2.init(-0.3, 0.3),
         Vector2.init(0.3, 0.3),
@@ -628,7 +649,7 @@ fn drawAlien(pos: Vector2, size: AlienSize) void {
         Vector2.init(0.5, 0.0),
     }, false);
 
-    drawLines(pos, SCALE * scale, 0, &.{
+    drawLines(g, pos, SCALE * scale, 0, &.{
         Vector2.init(-0.2, -0.3),
         Vector2.init(-0.1, -0.5),
         Vector2.init(0.1, -0.5),
@@ -644,10 +665,13 @@ const SHIP_LINES = [_]Vector2{
     Vector2.init(-0.3, -0.4),
 };
 
-fn render() !void {
+fn render(state: *State, api: *pdapi.PlaydateAPI) !void {
+    const g = api.graphics;
+
     // draw remaining lives
     for (0..state.lives) |i| {
         drawLines(
+            g,
             Vector2.init(SCALE + (@as(f32, @floatFromInt(i)) * SCALE), SCALE),
             SCALE,
             -math.pi,
@@ -657,10 +681,11 @@ fn render() !void {
     }
 
     // draw score
-    try drawNumber(state.score, Vector2.init(SIZE.x - SCALE, SCALE));
+    try drawNumber(api.graphics, state.score, Vector2.init(SIZE.x - SCALE, SCALE));
 
     if (!state.ship.isDead()) {
         drawLines(
+            g,
             state.ship.pos,
             SCALE,
             state.ship.rot,
@@ -668,8 +693,9 @@ fn render() !void {
             true,
         );
 
-        if (rl.isKeyDown(.key_w) and @mod(@as(i32, @intFromFloat(state.now * 20)), 2) == 0) {
+        if (isButtonDown(api, pdapi.BUTTON_UP) and @mod(@as(i32, @intFromFloat(state.now * 20)), 2) == 0) {
             drawLines(
+                g,
                 state.ship.pos,
                 SCALE,
                 state.ship.rot,
@@ -684,17 +710,18 @@ fn render() !void {
     }
 
     for (state.asteroids.items) |a| {
-        try drawAsteroid(a.pos, a.size, a.seed);
+        try drawAsteroid(api.graphics, a.pos, a.size, a.seed);
     }
 
     for (state.aliens.items) |a| {
-        drawAlien(a.pos, a.size);
+        drawAlien(api.graphics, a.pos, a.size);
     }
 
     for (state.particles.items) |p| {
         switch (p.values) {
             .LINE => |line| {
                 drawLines(
+                    g,
                     p.pos,
                     line.length,
                     line.rot,
@@ -706,31 +733,35 @@ fn render() !void {
                 );
             },
             .DOT => |dot| {
-                rl.drawCircleV(p.pos, dot.radius, rl.Color.white);
+                _ = dot;
+                // rl.drawCircleV(p.pos, dot.radius, rl.Color.white);
             },
         }
     }
 
     for (state.projectiles.items) |p| {
-        rl.drawCircleV(p.pos, @max(SCALE * 0.05, 1), rl.Color.white);
+        _ = p;
+        // rl.drawCircleV(p.pos, @max(SCALE * 0.05, 1), rl.Color.white);
     }
 }
 
-fn resetAsteroids() !void {
+fn resetAsteroids(state: *State) !void {
     try state.asteroids.resize(0);
 
     for (0..(30 + state.score / 1500)) |_| {
         const angle = math.tau * state.rand.float(f32);
         const size = state.rand.enumValue(AsteroidSize);
+
+        const pos = Vector2.init(
+            state.rand.float(f32) * SIZE.x,
+            state.rand.float(f32) * SIZE.y,
+        );
+
+        const vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(size.velocityScale() * 3.0 * state.rand.float(f32));
+
         try state.asteroids_queue.append(.{
-            .pos = Vector2.init(
-                state.rand.float(f32) * SIZE.x,
-                state.rand.float(f32) * SIZE.y,
-            ),
-            .vel = rlm.vector2Scale(
-                Vector2.init(math.cos(angle), math.sin(angle)),
-                size.velocityScale() * 3.0 * state.rand.float(f32),
-            ),
+            .pos = pos,
+            .vel = vel,
             .size = size,
             .seed = state.rand.int(u64),
         });
@@ -739,16 +770,16 @@ fn resetAsteroids() !void {
     state.stageStart = state.now;
 }
 
-fn resetGame() !void {
+fn resetGame(state: *State) !void {
     state.lives = 3;
     state.score = 0;
 
-    try resetStage();
-    try resetAsteroids();
+    try resetStage(state);
+    try resetAsteroids(state);
 }
 
 // reset after losing a life
-fn resetStage() !void {
+fn resetStage(state: *State) !void {
     if (state.ship.isDead()) {
         if (state.lives == 0) {
             state.reset = true;
@@ -759,69 +790,103 @@ fn resetStage() !void {
 
     state.ship.deathTime = 0.0;
     state.ship = .{
-        .pos = rlm.vector2Scale(SIZE, 0.5),
+        .pos = SIZE.scale(0.5),
         .vel = Vector2.init(0, 0),
         .rot = 0.0,
     };
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer std.debug.assert(gpa.deinit() == .ok);
+// pub fn main(state: State, prng: rand.Xoshiro256) !void {
+//     sound = .{
+//         .bloopLo = rl.loadSound("bloop_lo.wav"),
+//         .bloopHi = rl.loadSound("bloop_hi.wav"),
+//         .shoot = rl.loadSound("shoot.wav"),
+//         .thrust = rl.loadSound("thrust.wav"),
+//         .asteroid = rl.loadSound("asteroid.wav"),
+//         .explode = rl.loadSound("explode.wav"),
+//     };
 
-    rl.initWindow(SIZE.x, SIZE.y, "LARGE SPACE ROCKS");
-    rl.setWindowPosition(100, 100);
-    rl.setTargetFPS(60);
+//     try resetGame();
 
-    rl.initAudioDevice();
-    // rl.setMasterVolume(0.8);
-    defer rl.closeAudioDevice();
+//     while (!rl.windowShouldClose()) {
+//         state.delta = rl.getFrameTime();
+//         state.now += state.delta;
 
-    var prng = rand.Xoshiro256.init(@bitCast(std.time.timestamp()));
+//         try update();
 
-    state = .{
-        .ship = .{
-            .pos = rlm.vector2Scale(SIZE, 0.5),
-            .vel = Vector2.init(0, 0),
-            .rot = 0.0,
+//         rl.beginDrawing();
+//         defer rl.endDrawing();
+
+//         rl.clearBackground(rl.Color.black);
+
+//         try render();
+//         state.frame += 1;
+//     }
+// }
+
+const ExampleGlobalState = struct {
+    playdate: *pdapi.PlaydateAPI,
+
+    game_state: State,
+};
+
+pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEvent, arg: u32) callconv(.C) c_int {
+    //TODO: replace with your own code!
+
+    _ = arg;
+    switch (event) {
+        .EventInit => {
+            var playdate_allocator = PlaydateAllocator.init(playdate);
+            const allocator = playdate_allocator.allocator();
+
+            var prng = rand.Xoshiro256.init(playdate.system.getCurrentTimeMilliseconds());
+            const global_state: *ExampleGlobalState = allocator.create(ExampleGlobalState) catch unreachable;
+
+            const initSize = 512;
+
+            global_state.* = .{
+                .playdate = playdate,
+                .game_state = .{
+                    .ship = .{
+                        .pos = SIZE.scale(0.5),
+                        .vel = Vector2.init(0, 0),
+                        .rot = 0.0,
+                    },
+                    .asteroids = std.ArrayList(Asteroid).initCapacity(allocator, initSize) catch unreachable,
+                    .asteroids_queue = std.ArrayList(Asteroid).initCapacity(allocator, initSize) catch unreachable,
+                    .particles = std.ArrayList(Particle).initCapacity(allocator, initSize) catch unreachable,
+                    .projectiles = std.ArrayList(Projectile).initCapacity(allocator, initSize) catch unreachable,
+                    .aliens = std.ArrayList(Alien).initCapacity(allocator, initSize) catch unreachable,
+                    .rand = prng.random(),
+                },
+            };
+
+            resetGame(&global_state.*.game_state) catch unreachable;
+
+            playdate.system.setUpdateCallback(update_and_render, global_state);
         },
-        .asteroids = std.ArrayList(Asteroid).init(allocator),
-        .asteroids_queue = std.ArrayList(Asteroid).init(allocator),
-        .particles = std.ArrayList(Particle).init(allocator),
-        .projectiles = std.ArrayList(Projectile).init(allocator),
-        .aliens = std.ArrayList(Alien).init(allocator),
-        .rand = prng.random(),
-    };
-    defer state.asteroids.deinit();
-    defer state.asteroids_queue.deinit();
-    defer state.particles.deinit();
-    defer state.projectiles.deinit();
-    defer state.aliens.deinit();
-
-    sound = .{
-        .bloopLo = rl.loadSound("bloop_lo.wav"),
-        .bloopHi = rl.loadSound("bloop_hi.wav"),
-        .shoot = rl.loadSound("shoot.wav"),
-        .thrust = rl.loadSound("thrust.wav"),
-        .asteroid = rl.loadSound("asteroid.wav"),
-        .explode = rl.loadSound("explode.wav"),
-    };
-
-    try resetGame();
-
-    while (!rl.windowShouldClose()) {
-        state.delta = rl.getFrameTime();
-        state.now += state.delta;
-
-        try update();
-
-        rl.beginDrawing();
-        defer rl.endDrawing();
-
-        rl.clearBackground(rl.Color.black);
-
-        try render();
-        state.frame += 1;
+        else => {},
     }
+    return 0;
+}
+
+fn update_and_render(userdata: ?*anyopaque) callconv(.C) c_int {
+    const global_state: *ExampleGlobalState = @ptrCast(@alignCast(userdata.?));
+    const playdate = global_state.playdate;
+
+    global_state.*.game_state.frame += 1;
+
+    const previous_now = global_state.game_state.now;
+    global_state.*.game_state.now = playdate.system.getElapsedTime();
+    global_state.*.game_state.delta = playdate.system.getElapsedTime() - previous_now;
+
+    const state: *State = &global_state.game_state;
+
+    update(state, playdate) catch unreachable;
+
+    playdate.graphics.clear(@intFromEnum(pdapi.LCDSolidColor.ColorBlack));
+
+    render(state, playdate) catch unreachable;
+
+    return 1;
 }
