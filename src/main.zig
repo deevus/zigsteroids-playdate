@@ -184,6 +184,14 @@ const State = struct {
 // };
 // var sound: Sound = undefined;
 
+fn drawCircle(pos: Vector2, g: *const pdapi.PlaydateGraphics, radius: ?c_int) void {
+    const x: c_int = @intFromFloat(pos.x);
+    const y: c_int = @intFromFloat(pos.y);
+    const circumference = if (radius) |r| r * 2 else 2;
+
+    g.fillEllipse(x, y, circumference, circumference, 0, 360, @intFromEnum(pdapi.LCDSolidColor.ColorWhite));
+}
+
 fn drawLines(g: *const pdapi.PlaydateGraphics, org: Vector2, scale: f32, rot: f32, points: []const Vector2, connect: bool) void {
     const Transformer = struct {
         org: Vector2,
@@ -733,15 +741,13 @@ fn render(state: *State, api: *pdapi.PlaydateAPI) !void {
                 );
             },
             .DOT => |dot| {
-                _ = dot;
-                // rl.drawCircleV(p.pos, dot.radius, rl.Color.white);
+                drawCircle(p.pos, g, @intFromFloat(dot.radius));
             },
         }
     }
 
     for (state.projectiles.items) |p| {
-        _ = p;
-        // rl.drawCircleV(p.pos, @max(SCALE * 0.05, 1), rl.Color.white);
+        drawCircle(p.pos, g, 1);
     }
 }
 
