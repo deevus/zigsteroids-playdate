@@ -60,7 +60,7 @@ const Vector2 = struct {
     }
 };
 
-const THICKNESS = 2.5;
+const THICKNESS = 1.0;
 const SCALE = 9.0;
 const SIZE = Vector2.init(pdapi.LCD_COLUMNS, pdapi.LCD_ROWS);
 
