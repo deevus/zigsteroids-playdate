@@ -2,6 +2,7 @@ const std = @import("std");
 const math = std.math;
 const rand = std.rand;
 const PlaydateAllocator = @import("memory.zig").PlaydateAllocator;
+const Vector2 = @import("math.zig").Vector2;
 
 const pdapi = @import("playdate_api_definitions.zig");
 
@@ -26,47 +27,8 @@ pub inline fn isButtonPressed(button: pdapi.PDButtons) bool {
     return pressed & button != 0;
 }
 
-const Vector2 = struct {
-    x: f32,
-    y: f32,
-
-    pub fn init(x: f32, y: f32) Vector2 {
-        return .{ .x = x, .y = y };
-    }
-
-    pub fn scale(self: @This(), s: f32) Vector2 {
-        return .{ .x = self.x * s, .y = self.y * s };
-    }
-
-    pub fn rotate(self: @This(), angle: f32) Vector2 {
-        const c = math.cos(angle);
-        const s = math.sin(angle);
-        return .{
-            .x = self.x * c - self.y * s,
-            .y = self.x * s + self.y * c,
-        };
-    }
-
-    pub fn add(self: @This(), other: Vector2) Vector2 {
-        return .{ .x = self.x + other.x, .y = self.y + other.y };
-    }
-
-    pub fn subtract(self: @This(), other: Vector2) Vector2 {
-        return .{ .x = self.x - other.x, .y = self.y - other.y };
-    }
-
-    pub fn normalize(self: @This()) Vector2 {
-        const len = math.sqrt(self.x * self.x + self.y * self.y);
-        return .{ .x = self.x / len, .y = self.y / len };
-    }
-
-    pub fn distance(self: @This(), other: Vector2) f32 {
-        return math.sqrt((self.x - other.x) * (self.x - other.x) + (self.y - other.y) * (self.y - other.y));
-    }
-};
-
 const THICKNESS = 1.0;
-const SCALE = 9.0;
+const SCALE = 12.0;
 const SIZE = Vector2.init(pdapi.LCD_COLUMNS, pdapi.LCD_ROWS);
 
 const Ship = struct {
@@ -627,7 +589,11 @@ fn update() !void {
     }
 
     if (!state.ship.isDead() and state.bloop != state.lastBloop) {
-        playSound(if (state.bloop % 2 == 1) sound.bloopHi else sound.bloopLo);
+        if (state.bloop % 2 == 1) {
+            playSound(sound.bloopHi);
+        } else {
+            playSound(sound.bloopLo);
+        }
     }
     state.lastBloop = state.bloop;
 
