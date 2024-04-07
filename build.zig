@@ -39,6 +39,14 @@ pub fn build(b: *std.Build) !void {
     elf.entry = .{ .symbol_name = "eventHandler" };
 
     elf.setLinkerScriptPath(.{ .path = "link_map.ld" });
+
+    const playdate_dep = b.dependency("playdate-sdk", .{});
+
+    lib.root_module.addImport("playdate-sdk", playdate_dep.module("playdate"));
+    elf.root_module.addImport("playdate-sdk", playdate_dep.module("playdate"));
+
+    // elf.root_module.addImport("playdate", playdate_dep.module("playdate"));
+
     if (optimize == .ReleaseFast) {
         elf.root_module.omit_frame_pointer = true;
     }
