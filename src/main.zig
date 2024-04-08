@@ -805,14 +805,15 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
     _ = arg;
     switch (event) {
         .EventInit => {
-            var playdate_allocator = PlaydateAllocator.init(playdate);
-            const allocator = playdate_allocator.allocator();
+            sdk = Playdate.init(@ptrCast(playdate));
+
+            var arena = std.heap.ArenaAllocator.init(sdk.mem.pd_allocator.allocator());
+            var allocator = arena.allocator();
 
             var prng = rand.Xoshiro256.init(playdate.system.getCurrentTimeMilliseconds());
             const global_state: *GlobalState = allocator.create(GlobalState) catch unreachable;
 
             pd = playdate;
-            sdk = Playdate.init(@ptrCast(playdate));
 
             global_state.* = .{
                 .playdate = playdate,
