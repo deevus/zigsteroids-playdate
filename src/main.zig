@@ -33,7 +33,7 @@ pub inline fn isButtonPressed(button: pdapi.PDButtons) bool {
     return pressed & button != 0;
 }
 
-const THICKNESS = 1.0;
+const THICKNESS = 1;
 const SCALE = 12.0;
 const SIZE = Vector2.init(pdapi.LCD_COLUMNS, pdapi.LCD_ROWS);
 
@@ -187,12 +187,12 @@ fn drawCircle(pos: Vector2, radius: ?c_int) void {
 
 fn drawLines(org: Vector2, scale: f32, rot: f32, points: []const Vector2, connect: bool) void {
     sdk.graphics.drawLines(.{
-        .origin = org.toVector2i(),
+        .origin = org,
         .scale = scale,
         .rotation = rot,
         .points = points,
         .connect = connect,
-        .thickness = @intFromFloat(std.math.ceil(THICKNESS)),
+        .thickness = THICKNESS,
     });
 }
 
