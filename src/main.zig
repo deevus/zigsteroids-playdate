@@ -17,22 +17,6 @@ var sdk: Playdate = undefined;
 var arena: std.heap.ArenaAllocator = undefined;
 var allocator: std.mem.Allocator = undefined;
 
-pub inline fn isButtonDown(button: pdapi.PDButtons) bool {
-    var down: pdapi.PDButtons = 0;
-
-    pd.system.getButtonState(&down, null, null);
-
-    return down & button != 0;
-}
-
-pub inline fn isButtonPressed(button: pdapi.PDButtons) bool {
-    var pressed: pdapi.PDButtons = 0;
-
-    pd.system.getButtonState(null, &pressed, null);
-
-    return pressed & button != 0;
-}
-
 const THICKNESS = 1;
 const SCALE = 12.0;
 const SIZE = Vector2.init(pdapi.LCD_COLUMNS, pdapi.LCD_ROWS);
@@ -380,18 +364,18 @@ fn update() !void {
         const ROT_SPEED = 2;
         const SHIP_SPEED = 24;
 
-        if (isButtonDown(pdapi.BUTTON_LEFT)) {
+        if (sdk.system.isButtonDown(pdapi.BUTTON_LEFT)) {
             state.ship.rot -= state.delta * math.tau * ROT_SPEED;
         }
 
-        if (isButtonDown(pdapi.BUTTON_RIGHT)) {
+        if (sdk.system.isButtonDown(pdapi.BUTTON_RIGHT)) {
             state.ship.rot += state.delta * math.tau * ROT_SPEED;
         }
 
-        const dirAngle = state.ship.rot + (math.pi * 0.5);
+        const dirAngle = state.ship.rot + (std.math.pi * 0.5);
         const shipDir = Vector2.init(math.cos(dirAngle), math.sin(dirAngle));
 
-        if (isButtonDown(pdapi.BUTTON_UP)) {
+        if (sdk.system.isButtonDown(pdapi.BUTTON_UP)) {
             state.ship.vel = shipDir.scale(state.delta * SHIP_SPEED).add(state.ship.vel);
 
             if (state.frame % 2 == 0) {
@@ -407,7 +391,7 @@ fn update() !void {
             @mod(state.ship.pos.y, SIZE.y),
         );
 
-        if (isButtonPressed(pdapi.BUTTON_A)) {
+        if (sdk.system.isButtonPressed(pdapi.BUTTON_A)) {
             try state.projectiles.append(.{
                 .pos = state.ship.pos.add(shipDir.scale(SCALE * 0.55)),
                 .vel = shipDir.scale(10.0),
@@ -429,6 +413,7 @@ fn update() !void {
     }
 
     // add asteroids from queue
+    try state.asteroids.ensureUnusedCapacity(state.asteroids_queue.items.len);
     for (state.asteroids_queue.items) |a| {
         try state.asteroids.append(a);
     }
@@ -500,7 +485,7 @@ fn update() !void {
     {
         var i: usize = 0;
         while (i < state.projectiles.items.len) {
-            var p = state.projectiles.items[i];
+            var p = &state.projectiles.items[i];
             p.pos = p.pos.add(p.vel);
             p.pos = Vector2.init(
                 @mod(p.pos.x, SIZE.x),
@@ -509,8 +494,6 @@ fn update() !void {
 
             if (!p.remove and p.ttl > state.delta) {
                 p.ttl -= state.delta;
-
-                state.projectiles.items[i] = p;
 
                 i += 1;
             } else {
@@ -693,7 +676,7 @@ fn render() !void {
             true,
         );
 
-        if (isButtonDown(pdapi.BUTTON_UP) and @mod(@as(i32, @intFromFloat(state.now * 20)), 2) == 0) {
+        if (sdk.system.isButtonDown(pdapi.BUTTON_UP) and @mod(@as(i32, @intFromFloat(state.now * 20)), 2) == 0) {
             drawLines(
                 state.ship.pos,
                 SCALE,
