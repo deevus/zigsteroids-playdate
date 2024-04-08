@@ -24,10 +24,13 @@ pub fn build(b: *std.Build) !void {
         else => @panic("Unsupported OS"),
     });
 
-    const playdate_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{
-        .arch_os_abi = "thumb-freestanding-eabihf",
-        .cpu_features = "cortex_m7+vfp4d16sp",
-    }));
+    const playdate_target = b.resolveTargetQuery(.{
+        .cpu_arch = .thumb,
+        .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_m7 },
+        .os_tag = .freestanding,
+        .abi = .eabihf,
+    });
+
     const elf = b.addExecutable(.{
         .name = "pdex.elf",
         .root_source_file = .{ .path = "src/main.zig" },
