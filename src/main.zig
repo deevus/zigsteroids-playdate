@@ -869,3 +869,77 @@ fn update_and_render(_: ?*anyopaque) callconv(.C) c_int {
 
     return 1;
 }
+
+/// Crashes the game with a message and error return trace in the following format:
+///
+/// ```txt
+/// panic: your message here
+/// 9001cdef 900189ab 90014567 90010123 9000cdef
+/// 900089ab 90004567 90000123
+/// ```
+///
+/// To override the default panic handler with this function, add the following lines of code to
+/// your root source file:
+///
+/// ```zig
+/// const playdate = @import("playdate");
+///
+/// pub const panic = playdate.panic;
+/// ```
+///
+pub fn panic(msg: []const u8, error_ret_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    const self = sdk.system;
+
+    @setCold(true);
+
+    const num_addrs = (if (error_ret_trace) |trace| trace.index else 0) + 1;
+    const chars_per_addr = 1 + @bitSizeOf(usize) / 4;
+    const buf_len = msg.len + num_addrs * chars_per_addr;
+    if (self.api.realloc(null, buf_len + 1)) |ptr| {
+        defer _ = self.api.realloc(ptr, 0);
+
+        const buf: [*]u8 = @ptrCast(ptr);
+        var buf_i: usize = 0;
+
+        @memcpy(buf, msg);
+        buf_i += msg.len;
+        var addr_i: usize = 0;
+        if (error_ret_trace) |trace| {
+            while (addr_i < trace.index) : (addr_i += 1) {
+                buf[buf_i] = if (addr_i % 5 == 0) '\n' else ' ';
+                buf_i += 1;
+                const addr = trace.instruction_addresses[addr_i];
+                var shift: std.math.Log2Int(usize) = @bitSizeOf(usize) - 4;
+                while (true) : (shift -= 4) {
+                    var nybble = addr >> shift & 0xf;
+                    nybble += if (nybble < 0xa) '0' else 'a' - 0xa;
+                    buf[buf_i] = @truncate(nybble);
+                    buf_i += 1;
+                    if (shift == 0) break;
+                }
+            }
+        }
+        {
+            buf[buf_i] = if (addr_i % 5 == 0) '\n' else ' ';
+            buf_i += 1;
+            const addr = ret_addr orelse @returnAddress();
+            var shift: std.math.Log2Int(usize) = @bitSizeOf(usize) - 4;
+            while (true) : (shift -= 4) {
+                var nybble = addr >> shift & 0xf;
+                nybble += if (nybble < 0xa) '0' else 'a' - 0xa;
+                buf[buf_i] = @truncate(nybble);
+                buf_i += 1;
+                if (shift == 0) break;
+            }
+        }
+        buf[buf_i] = 0;
+
+        self.api.@"error"("panic: %s", buf);
+    } else {
+        self.api.@"error"("panic");
+    }
+
+    while (true) {
+        @breakpoint();
+    }
+}
