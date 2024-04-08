@@ -14,6 +14,8 @@ var sound: *Sound = undefined;
 var pd: *pdapi.PlaydateAPI = undefined;
 var player: *pdapi.SamplePlayer = undefined;
 var sdk: Playdate = undefined;
+var arena: std.heap.ArenaAllocator = undefined;
+var allocator: std.mem.Allocator = undefined;
 
 pub inline fn isButtonDown(button: pdapi.PDButtons) bool {
     var down: pdapi.PDButtons = 0;
@@ -806,9 +808,8 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
     switch (event) {
         .EventInit => {
             sdk = Playdate.init(@ptrCast(playdate));
-
-            var arena = std.heap.ArenaAllocator.init(sdk.mem.pd_allocator.allocator());
-            var allocator = arena.allocator();
+            arena = std.heap.ArenaAllocator.init(sdk.mem.pd_allocator.allocator());
+            allocator = arena.allocator();
 
             var prng = rand.Xoshiro256.init(playdate.system.getCurrentTimeMilliseconds());
             const global_state: *GlobalState = allocator.create(GlobalState) catch unreachable;
@@ -823,11 +824,11 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
                         .vel = Vector2.init(0, 0),
                         .rot = 0.0,
                     },
-                    .asteroids = std.ArrayList(Asteroid).initCapacity(allocator, MAX_ASTEROIDS) catch @panic("Failed to allocate asteroids array"),
-                    .asteroids_queue = std.ArrayList(Asteroid).initCapacity(allocator, MAX_ASTEROIDS) catch @panic("Failed to allocate asteroids queue"),
-                    .particles = std.ArrayList(Particle).initCapacity(allocator, MAX_PARTICLES) catch @panic("Failed to allocate particles array"),
-                    .projectiles = std.ArrayList(Projectile).initCapacity(allocator, MAX_PROJECTILES) catch @panic("Failed to allocate projectiles array"),
-                    .aliens = std.ArrayList(Alien).initCapacity(allocator, MAX_ALIENS) catch @panic("Failed to allocate aliens array"),
+                    .asteroids = std.ArrayList(Asteroid).init(allocator),
+                    .asteroids_queue = std.ArrayList(Asteroid).init(allocator),
+                    .particles = std.ArrayList(Particle).init(allocator),
+                    .projectiles = std.ArrayList(Projectile).init(allocator),
+                    .aliens = std.ArrayList(Alien).init(allocator),
                     .rand = prng.random(),
                 },
                 .sound_player = playdate.sound.sampleplayer.newPlayer().?,
@@ -861,9 +862,9 @@ fn update_and_render(_: ?*anyopaque) callconv(.C) c_int {
     state.now = pd.system.getElapsedTime();
     state.delta = pd.system.getElapsedTime() - previous_now;
 
-    update() catch unreachable;
+    update() catch @panic("Update failed");
 
-    render() catch unreachable;
+    render() catch @panic("Render failed");
 
     sdk.system.drawFps(.{ .x = 0, .y = 0 });
 
