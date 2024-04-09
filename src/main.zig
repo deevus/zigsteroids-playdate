@@ -3,6 +3,7 @@ const math = std.math;
 const rand = std.rand;
 const PlaydateAllocator = @import("memory.zig").PlaydateAllocator;
 const Playdate = @import("playdate-sdk").Playdate;
+const PlaydateSamplePlayer = @import("playdate-sdk").sound.PlaydateSamplePlayer;
 const Vector2 = @import("playdate-sdk").math.Vector2;
 const MutableVector2 = @import("playdate-sdk").math.MutableVector2;
 const Vector2i = @import("playdate-sdk").math.Vector2i;
@@ -23,8 +24,13 @@ const SIZE = Vector2.init(pdapi.LCD_COLUMNS, pdapi.LCD_ROWS);
 
 const MAX_ASTEROIDS = 256;
 const MAX_PARTICLES = 256;
-const MAX_PROJECTILES = 32;
+const MAX_PROJECTILES = 256;
 const MAX_ALIENS = 16;
+
+const BUFFER_SIZE = 1024 * 1024 * 2;
+
+var buffer: [BUFFER_SIZE]u8 = undefined;
+var fba: std.heap.FixedBufferAllocator = undefined;
 
 const Ship = struct {
     pos: Vector2,
@@ -134,15 +140,40 @@ const State = struct {
     lastBloop: usize = 0,
     bloop: usize = 0,
     frame: usize = 0,
+
+    fn addAsteroid(self: *@This(), asteroid: Asteroid) !void {
+        const total_asteroids = self.asteroids.items.len + self.asteroids_queue.items.len;
+        if (total_asteroids < MAX_ASTEROIDS) {
+            try self.asteroids_queue.append(asteroid);
+        }
+    }
+
+    fn addParticle(self: *@This(), particle: Particle) !void {
+        if (self.particles.items.len < MAX_PARTICLES) {
+            try self.particles.append(particle);
+        }
+    }
+
+    fn addProjectile(self: *@This(), projectile: Projectile) !void {
+        if (self.projectiles.items.len < MAX_PROJECTILES) {
+            try self.projectiles.append(projectile);
+        }
+    }
+
+    fn addAlien(self: *@This(), alien: Alien) !void {
+        if (self.aliens.items.len < MAX_ALIENS) {
+            try self.aliens.append(alien);
+        }
+    }
 };
 
 const Sound = struct {
-    bloopLo: *pdapi.SamplePlayer,
-    bloopHi: *pdapi.SamplePlayer,
-    shoot: *pdapi.SamplePlayer,
-    thrust: *pdapi.SamplePlayer,
-    asteroid: *pdapi.SamplePlayer,
-    explode: *pdapi.SamplePlayer,
+    bloopLo: PlaydateSamplePlayer,
+    bloopHi: PlaydateSamplePlayer,
+    shoot: PlaydateSamplePlayer,
+    thrust: PlaydateSamplePlayer,
+    asteroid: PlaydateSamplePlayer,
+    explode: PlaydateSamplePlayer,
 };
 
 fn loadSample(file_path: [:0]const u8) !*pdapi.SamplePlayer {
@@ -157,8 +188,8 @@ fn loadSample(file_path: [:0]const u8) !*pdapi.SamplePlayer {
     return sample_player;
 }
 
-fn playSound(s: *pdapi.SamplePlayer) void {
-    _ = pd.sound.sampleplayer.play(s, 1, 1);
+fn playSound(s: PlaydateSamplePlayer) void {
+    s.play();
 }
 
 fn drawCircle(pos: Vector2, radius: ?c_int) void {
@@ -287,35 +318,39 @@ fn drawAsteroid(pos: Vector2, size: AsteroidSize, seed: u64) !void {
 }
 
 fn splatLines(pos: Vector2, count: usize) !void {
-    for (0..count) |_| {
-        const angle = math.tau * state.rand.float(f32);
-        try state.particles.append(.{
-            .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
-            .vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(2.0 * state.rand.float(f32)),
-            .ttl = 3.0 + state.rand.float(f32),
-            .values = .{
-                .LINE = .{
-                    .rot = math.tau * state.rand.float(f32),
-                    .length = SCALE * (0.6 + (0.4 * state.rand.float(f32))),
+    if (state.particles.items.len < MAX_PARTICLES) {
+        for (0..count) |_| {
+            const angle = math.tau * state.rand.float(f32);
+            try state.addParticle(.{
+                .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
+                .vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(2.0 * state.rand.float(f32)),
+                .ttl = 3.0 + state.rand.float(f32),
+                .values = .{
+                    .LINE = .{
+                        .rot = math.tau * state.rand.float(f32),
+                        .length = SCALE * (0.6 + (0.4 * state.rand.float(f32))),
+                    },
                 },
-            },
-        });
+            });
+        }
     }
 }
 
 fn splatDots(pos: Vector2, count: usize) !void {
-    for (0..count) |_| {
-        const angle = math.tau * state.rand.float(f32);
-        try state.particles.append(.{
-            .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
-            .vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(2.0 + 4.0 * state.rand.float(f32)),
-            .ttl = 0.5 + (0.4 * state.rand.float(f32)),
-            .values = .{
-                .DOT = .{
-                    .radius = SCALE * 0.025,
+    if (state.particles.items.len < MAX_PARTICLES) {
+        for (0..count) |_| {
+            const angle = math.tau * state.rand.float(f32);
+            try state.addParticle(.{
+                .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
+                .vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(2.0 + 4.0 * state.rand.float(f32)),
+                .ttl = 0.5 + (0.4 * state.rand.float(f32)),
+                .values = .{
+                    .DOT = .{
+                        .radius = SCALE * 0.025,
+                    },
                 },
-            },
-        });
+            });
+        }
     }
 }
 
@@ -349,7 +384,7 @@ fn hitAsteroid(a: *Asteroid, impact: ?Vector2) !void {
             .seed = seed,
         };
 
-        try state.asteroids_queue.append(asteroid);
+        try state.addAsteroid(asteroid);
     }
 }
 
@@ -392,7 +427,7 @@ fn update() !void {
         );
 
         if (sdk.system.isButtonPressed(pdapi.BUTTON_A)) {
-            try state.projectiles.append(.{
+            try state.addProjectile(.{
                 .pos = state.ship.pos.add(shipDir.scale(SCALE * 0.55)),
                 .vel = shipDir.scale(10.0),
                 .ttl = 2.0,
@@ -537,7 +572,7 @@ fn update() !void {
                 if ((state.now - a.lastShot) > a.size.shotTime()) {
                     a.lastShot = state.now;
                     const dir = state.ship.pos.subtract(a.pos).normalize();
-                    try state.projectiles.append(.{
+                    try state.addProjectile(.{
                         .pos = a.pos.add(dir.scale(SCALE * 0.55)),
                         .vel = dir.scale(6.0),
                         .ttl = 2.0,
@@ -583,7 +618,7 @@ fn update() !void {
         if (state.bloop % 2 == 1) {
             playSound(sound.bloopHi);
         } else {
-            playSound(sound.bloopLo);
+            sound.bloopLo.play();
         }
     }
     state.lastBloop = state.bloop;
@@ -593,7 +628,7 @@ fn update() !void {
     }
 
     if ((state.lastScore / 5000) != (state.score / 5000)) {
-        try state.aliens.append(.{
+        try state.addAlien(.{
             .pos = Vector2.init(
                 if (state.rand.boolean()) 0 else SIZE.x - SCALE,
                 state.rand.float(f32) * SIZE.y,
@@ -604,7 +639,7 @@ fn update() !void {
     }
 
     if ((state.lastScore / 8000) != (state.score / 8000)) {
-        try state.aliens.append(.{
+        try state.addAlien(.{
             .pos = Vector2.init(
                 if (state.rand.boolean()) 0 else SIZE.x - SCALE,
                 state.rand.float(f32) * SIZE.y,
@@ -740,7 +775,7 @@ fn resetAsteroids() !void {
 
         const vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(size.velocityScale() * 3.0 * state.rand.float(f32));
 
-        try state.asteroids_queue.append(.{
+        try state.addAsteroid(.{
             .pos = pos,
             .vel = vel,
             .size = size,
@@ -791,7 +826,8 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
     switch (event) {
         .EventInit => {
             sdk = Playdate.init(@ptrCast(playdate));
-            arena = std.heap.ArenaAllocator.init(sdk.mem.pd_allocator.allocator());
+            fba = std.heap.FixedBufferAllocator.init(&buffer);
+            arena = std.heap.ArenaAllocator.init(fba.allocator());
             allocator = arena.allocator();
 
             var prng = rand.Xoshiro256.init(playdate.system.getCurrentTimeMilliseconds());
@@ -816,12 +852,12 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
                 },
                 .sound_player = playdate.sound.sampleplayer.newPlayer().?,
                 .sound = .{
-                    .bloopLo = loadSample("bloop_lo.wav") catch unreachable,
-                    .bloopHi = loadSample("bloop_hi.wav") catch unreachable,
-                    .shoot = loadSample("shoot.wav") catch unreachable,
-                    .thrust = loadSample("thrust.wav") catch unreachable,
-                    .asteroid = loadSample("asteroid.wav") catch unreachable,
-                    .explode = loadSample("explode.wav") catch unreachable,
+                    .bloopLo = sdk.sound.loadSample("bloop_lo.wav"),
+                    .bloopHi = sdk.sound.loadSample("bloop_hi.wav"),
+                    .shoot = sdk.sound.loadSample("shoot.wav"),
+                    .thrust = sdk.sound.loadSample("thrust.wav"),
+                    .asteroid = sdk.sound.loadSample("asteroid.wav"),
+                    .explode = sdk.sound.loadSample("explode.wav"),
                 },
             };
 
@@ -829,7 +865,7 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
             state = &global_state.game_state;
             player = global_state.sound_player;
 
-            resetGame() catch unreachable;
+            resetGame() catch @panic("Failed to reset game");
 
             playdate.system.setUpdateCallback(update_and_render, global_state);
         },
