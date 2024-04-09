@@ -1,12 +1,12 @@
 const std = @import("std");
-const math = std.math;
 const rand = std.rand;
 const PlaydateAllocator = @import("memory.zig").PlaydateAllocator;
 const Playdate = @import("playdate-sdk").Playdate;
 const PlaydateSamplePlayer = @import("playdate-sdk").sound.PlaydateSamplePlayer;
-const Vector2 = @import("playdate-sdk").math.Vector2;
-const MutableVector2 = @import("playdate-sdk").math.MutableVector2;
-const Vector2i = @import("playdate-sdk").math.Vector2i;
+
+const math = @import("playdate-sdk").math;
+const Vector2 = math.Vector2;
+const Vector2i = math.Vector2i;
 
 const pdapi = @import("playdate_api_definitions.zig");
 
@@ -308,9 +308,9 @@ fn drawAsteroid(pos: Vector2, size: AsteroidSize, seed: u64) !void {
             radius -= 0.2;
         }
 
-        const angle: f32 = (@as(f32, @floatFromInt(i)) * (math.tau / @as(f32, @floatFromInt(n)))) + (math.pi * 0.125 * random.float(f32));
+        const angle: f32 = (@as(f32, @floatFromInt(i)) * (std.math.tau / @as(f32, @floatFromInt(n)))) + (std.math.pi * 0.125 * random.float(f32));
         try points.append(
-            Vector2.init(math.cos(angle), math.sin(angle)).scale(radius),
+            Vector2.init(std.math.cos(angle), std.math.sin(angle)).scale(radius),
         );
     }
 
@@ -320,14 +320,14 @@ fn drawAsteroid(pos: Vector2, size: AsteroidSize, seed: u64) !void {
 fn splatLines(pos: Vector2, count: usize) !void {
     if (state.particles.items.len < MAX_PARTICLES) {
         for (0..count) |_| {
-            const angle = math.tau * state.rand.float(f32);
+            const angle = std.math.tau * state.rand.float(f32);
             try state.addParticle(.{
                 .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
-                .vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(2.0 * state.rand.float(f32)),
+                .vel = Vector2.init(std.math.cos(angle), std.math.sin(angle)).scale(2.0 * state.rand.float(f32)),
                 .ttl = 3.0 + state.rand.float(f32),
                 .values = .{
                     .LINE = .{
-                        .rot = math.tau * state.rand.float(f32),
+                        .rot = std.math.tau * state.rand.float(f32),
                         .length = SCALE * (0.6 + (0.4 * state.rand.float(f32))),
                     },
                 },
@@ -339,10 +339,10 @@ fn splatLines(pos: Vector2, count: usize) !void {
 fn splatDots(pos: Vector2, count: usize) !void {
     if (state.particles.items.len < MAX_PARTICLES) {
         for (0..count) |_| {
-            const angle = math.tau * state.rand.float(f32);
+            const angle = std.math.tau * state.rand.float(f32);
             try state.addParticle(.{
                 .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
-                .vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(2.0 + 4.0 * state.rand.float(f32)),
+                .vel = Vector2.init(std.math.cos(angle), std.math.sin(angle)).scale(2.0 + 4.0 * state.rand.float(f32)),
                 .ttl = 0.5 + (0.4 * state.rand.float(f32)),
                 .values = .{
                     .DOT = .{
@@ -400,15 +400,15 @@ fn update() !void {
         const SHIP_SPEED = 24;
 
         if (sdk.system.isButtonDown(pdapi.BUTTON_LEFT)) {
-            state.ship.rot -= state.delta * math.tau * ROT_SPEED;
+            state.ship.rot -= state.delta * std.math.tau * ROT_SPEED;
         }
 
         if (sdk.system.isButtonDown(pdapi.BUTTON_RIGHT)) {
-            state.ship.rot += state.delta * math.tau * ROT_SPEED;
+            state.ship.rot += state.delta * std.math.tau * ROT_SPEED;
         }
 
         const dirAngle = state.ship.rot + (std.math.pi * 0.5);
-        const shipDir = Vector2.init(math.cos(dirAngle), math.sin(dirAngle));
+        const shipDir = Vector2.init(std.math.cos(dirAngle), std.math.sin(dirAngle));
 
         if (sdk.system.isButtonDown(pdapi.BUTTON_UP)) {
             state.ship.vel = shipDir.scale(state.delta * SHIP_SPEED).add(state.ship.vel);
@@ -559,8 +559,8 @@ fn update() !void {
             if (!a.remove) {
                 if ((state.now - a.lastDir) > a.size.dirChangeTime()) {
                     a.lastDir = state.now;
-                    const angle = math.tau * state.rand.float(f32);
-                    a.dir = Vector2.init(math.cos(angle), math.sin(angle));
+                    const angle = std.math.tau * state.rand.float(f32);
+                    a.dir = Vector2.init(std.math.cos(angle), std.math.sin(angle));
                 }
 
                 a.pos = a.pos.add(a.dir.scale(a.size.speed()));
@@ -693,7 +693,7 @@ fn render() !void {
         drawLines(
             Vector2.init(SCALE + (@as(f32, @floatFromInt(i)) * SCALE), SCALE),
             SCALE,
-            -math.pi,
+            -std.math.pi,
             &SHIP_LINES,
             true,
         );
@@ -765,7 +765,7 @@ fn resetAsteroids() !void {
     const n = @min(30 + state.score / 1500, MAX_ASTEROIDS);
 
     for (0..n) |_| {
-        const angle = math.tau * state.rand.float(f32);
+        const angle = std.math.tau * state.rand.float(f32);
         const size = state.rand.enumValue(AsteroidSize);
 
         const pos = Vector2.init(
@@ -773,7 +773,7 @@ fn resetAsteroids() !void {
             state.rand.float(f32) * SIZE.y,
         );
 
-        const vel = Vector2.init(math.cos(angle), math.sin(angle)).scale(size.velocityScale() * 3.0 * state.rand.float(f32));
+        const vel = Vector2.init(std.math.cos(angle), std.math.sin(angle)).scale(size.velocityScale() * 3.0 * state.rand.float(f32));
 
         try state.addAsteroid(.{
             .pos = pos,
