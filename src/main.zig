@@ -208,6 +208,7 @@ fn drawLines(org: Vector2, scale: f32, rot: f32, points: []const Vector2, connec
         .points = points,
         .connect = connect,
         .thickness = THICKNESS,
+        .color = .ColorWhite,
     });
 }
 
@@ -408,10 +409,13 @@ fn update() !void {
         }
 
         const dirAngle = state.ship.rot + (std.math.pi * 0.5);
-        const shipDir = Vector2.init(std.math.cos(dirAngle), std.math.sin(dirAngle));
+        var shipDir = Vector2.init(std.math.cos(dirAngle), std.math.sin(dirAngle));
 
         if (sdk.system.isButtonDown(pdapi.BUTTON_UP)) {
-            state.ship.vel = shipDir.scale(state.delta * SHIP_SPEED).add(state.ship.vel);
+            math.scale(&shipDir, state.delta * SHIP_SPEED);
+            math.add(&shipDir, state.ship.vel);
+
+            state.ship.vel = shipDir;
 
             if (state.frame % 2 == 0) {
                 playSound(sound.thrust);
@@ -419,12 +423,10 @@ fn update() !void {
         }
 
         const DRAG = 0.015;
-        state.ship.vel = state.ship.vel.scale(1.0 - DRAG);
-        state.ship.pos = state.ship.pos.add(state.ship.vel);
-        state.ship.pos = Vector2.init(
-            @mod(state.ship.pos.x, SIZE.x),
-            @mod(state.ship.pos.y, SIZE.y),
-        );
+        math.scale(&state.ship.vel, 1.0 - DRAG);
+        math.add(&state.ship.pos, state.ship.vel);
+        state.ship.pos.x = @mod(state.ship.pos.x, SIZE.x);
+        state.ship.pos.y = @mod(state.ship.pos.y, SIZE.y);
 
         if (sdk.system.isButtonPressed(pdapi.BUTTON_A)) {
             try state.addProjectile(.{
@@ -435,7 +437,7 @@ fn update() !void {
             });
             playSound(sound.shoot);
 
-            state.ship.vel = state.ship.vel.add(shipDir.scale(-0.5));
+            math.add(&state.ship.vel, shipDir.scale(-0.5));
         }
 
         // check for projectile v. ship collision
@@ -459,25 +461,25 @@ fn update() !void {
         while (i < state.asteroids.items.len) {
             var a = state.asteroids.items[i];
 
-            a.pos = a.pos.add(a.vel);
-            a.pos = Vector2.init(
-                @mod(a.pos.x, SIZE.x),
-                @mod(a.pos.y, SIZE.y),
-            );
+            math.add(&a.pos, a.vel);
+            a.pos.x = @mod(a.pos.x, SIZE.x);
+            a.pos.y = @mod(a.pos.y, SIZE.y);
 
             state.asteroids.items[i] = a;
+
+            const ship_velocity_unit = state.ship.vel.normalize();
 
             // check for ship v. asteroid collision
             if (!state.ship.isDead() and a.pos.distance(state.ship.pos) < a.size.size() * a.size.collisionScale()) {
                 state.ship.deathTime = state.now;
-                try hitAsteroid(&a, state.ship.vel.normalize());
+                try hitAsteroid(&a, ship_velocity_unit);
             }
 
             // check for alien v. asteroid collision
             for (state.aliens.items) |*l| {
                 if (!l.remove and a.pos.distance(l.pos) < a.size.size() * a.size.collisionScale()) {
                     l.remove = true;
-                    try hitAsteroid(&a, state.ship.vel.normalize());
+                    try hitAsteroid(&a, ship_velocity_unit);
                 }
             }
 
@@ -501,11 +503,10 @@ fn update() !void {
         var i: usize = 0;
         while (i < state.particles.items.len) {
             var p = &state.particles.items[i];
-            p.pos = p.pos.add(p.vel);
-            p.pos = Vector2.init(
-                @mod(p.pos.x, SIZE.x),
-                @mod(p.pos.y, SIZE.y),
-            );
+
+            math.add(&p.pos, p.vel);
+            p.pos.x = @mod(p.pos.x, SIZE.x);
+            p.pos.y = @mod(p.pos.y, SIZE.y);
 
             if (p.ttl > state.delta) {
                 p.ttl -= state.delta;
@@ -521,11 +522,9 @@ fn update() !void {
         var i: usize = 0;
         while (i < state.projectiles.items.len) {
             var p = &state.projectiles.items[i];
-            p.pos = p.pos.add(p.vel);
-            p.pos = Vector2.init(
-                @mod(p.pos.x, SIZE.x),
-                @mod(p.pos.y, SIZE.y),
-            );
+            math.add(&p.pos, p.vel);
+            p.pos.x = @mod(p.pos.x, SIZE.x);
+            p.pos.y = @mod(p.pos.y, SIZE.y);
 
             if (!p.remove and p.ttl > state.delta) {
                 p.ttl -= state.delta;
@@ -563,17 +562,22 @@ fn update() !void {
                     a.dir = Vector2.init(std.math.cos(angle), std.math.sin(angle));
                 }
 
-                a.pos = a.pos.add(a.dir.scale(a.size.speed()));
-                a.pos = Vector2.init(
-                    @mod(a.pos.x, SIZE.x),
-                    @mod(a.pos.y, SIZE.y),
-                );
+                math.add(&a.pos, a.dir.scale(a.size.speed()));
+                a.pos.x = @mod(a.pos.x, SIZE.x);
+                a.pos.y = @mod(a.pos.y, SIZE.y);
 
                 if ((state.now - a.lastShot) > a.size.shotTime()) {
                     a.lastShot = state.now;
-                    const dir = state.ship.pos.subtract(a.pos).normalize();
+
+                    var dir = state.ship.pos.clone();
+                    math.subtract(&dir, a.pos);
+                    math.normalize(&dir);
+
+                    var projectile_pos = a.pos.clone();
+                    math.add(&projectile_pos, dir.scale(SCALE * 0.55));
+
                     try state.addProjectile(.{
-                        .pos = a.pos.add(dir.scale(SCALE * 0.55)),
+                        .pos = projectile_pos,
                         .vel = dir.scale(6.0),
                         .ttl = 2.0,
                         .spawn = state.now,
