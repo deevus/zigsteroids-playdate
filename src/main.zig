@@ -321,9 +321,16 @@ fn splatLines(pos: Vector2, count: usize) !void {
     if (state.particles.items.len < MAX_PARTICLES) {
         for (0..count) |_| {
             const angle = std.math.tau * state.rand.float(f32);
+
+            var particle_pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3);
+            math.add(&particle_pos, pos);
+
+            var particle_vel = Vector2.init(std.math.cos(angle), std.math.sin(angle));
+            math.scale(&particle_vel, 2.0 * state.rand.float(f32));
+
             try state.addParticle(.{
-                .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
-                .vel = Vector2.init(std.math.cos(angle), std.math.sin(angle)).scale(2.0 * state.rand.float(f32)),
+                .pos = particle_pos,
+                .vel = particle_vel,
                 .ttl = 3.0 + state.rand.float(f32),
                 .values = .{
                     .LINE = .{
