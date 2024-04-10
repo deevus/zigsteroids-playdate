@@ -18,13 +18,15 @@ var arena: std.heap.ArenaAllocator = undefined;
 var allocator: std.mem.Allocator = undefined;
 
 const THICKNESS = 1;
-const SCALE = 12.0;
+const SCALE = 20.0;
 const SIZE = Vector2.init(pdapi.LCD_COLUMNS, pdapi.LCD_ROWS);
 
 const MAX_ASTEROIDS = 256;
 const MAX_PARTICLES = 256;
 const MAX_PROJECTILES = 256;
 const MAX_ALIENS = 16;
+
+const START_ASTEROIDS = 10;
 
 const BUFFER_SIZE = 1024 * 1024 * 2;
 
@@ -195,7 +197,7 @@ fn drawCircle(pos: Vector2, radius: ?c_int) void {
     sdk.graphics.drawCircle(.{
         .position = pos.toVector2i(),
         .radius = radius,
-        .color = .ColorBlack,
+        .color = .ColorWhite,
     });
 }
 
@@ -289,8 +291,8 @@ const AsteroidSize = enum {
     fn velocityScale(self: @This()) f32 {
         return switch (self) {
             .BIG => 0.75,
-            .MEDIUM => 1.8,
-            .SMALL => 3.0,
+            .MEDIUM => 1.3,
+            .SMALL => 2.0,
         };
     }
 };
@@ -787,14 +789,14 @@ fn render() !void {
     }
 
     for (state.projectiles.items) |p| {
-        drawCircle(p.pos, 1);
+        drawCircle(p.pos, 2);
     }
 }
 
 fn resetAsteroids() !void {
     try state.asteroids.resize(0);
 
-    const n = @min(30 + state.score / 1500, MAX_ASTEROIDS);
+    const n = @min(START_ASTEROIDS + state.score / 1500, MAX_ASTEROIDS);
 
     for (0..n) |_| {
         const angle = std.math.tau * state.rand.float(f32);
