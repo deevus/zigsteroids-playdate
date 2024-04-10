@@ -136,9 +136,9 @@ pub const PlaydateSys = extern struct {
         callback: *const fn (data: [*c]const u8) callconv(.C) void,
     ) callconv(.C) void,
     //vaFormatString: *const fn (
-        //outstr: [*c][*c]u8,
-        //fmt: [*c]const u8,
-        //args: VaList,
+    //outstr: [*c][*c]u8,
+    //fmt: [*c]const u8,
+    //args: VaList,
     //) callconv(.C) c_int,
     parseString: *const fn (
         str: [*c]const u8,

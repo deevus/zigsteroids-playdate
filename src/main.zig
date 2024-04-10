@@ -909,8 +909,11 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
 fn update_and_render(_: ?*anyopaque) callconv(.C) c_int {
     state.frame += 1;
 
+    const elapsed_ms: f32 = @floatFromInt(pd.system.getCurrentTimeMilliseconds());
+    const elapsed_seconds: f32 = elapsed_ms / 1000.0;
+
     const previous_now = state.now;
-    state.now = pd.system.getElapsedTime();
+    state.now = elapsed_seconds;
     state.delta = state.now - previous_now;
 
     update() catch @panic("Update failed");
