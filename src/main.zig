@@ -667,29 +667,32 @@ fn update() !void {
     state.lastScore = state.score;
 }
 
+const ALIEN_LINES_A = [_]Vector2{
+    Vector2.init(-0.5, 0.0),
+    Vector2.init(-0.3, 0.3),
+    Vector2.init(0.3, 0.3),
+    Vector2.init(0.5, 0.0),
+    Vector2.init(0.3, -0.3),
+    Vector2.init(-0.3, -0.3),
+    Vector2.init(-0.5, 0.0),
+    Vector2.init(0.5, 0.0),
+};
+
+const ALIEN_LINES_B = [_]Vector2{
+    Vector2.init(-0.2, -0.3),
+    Vector2.init(-0.1, -0.5),
+    Vector2.init(0.1, -0.5),
+    Vector2.init(0.2, -0.3),
+};
+
 fn drawAlien(pos: Vector2, size: AlienSize) void {
     const scale: f32 = switch (size) {
         .BIG => 1.0,
         .SMALL => 0.5,
     };
 
-    drawLines(pos, SCALE * scale, 0, &.{
-        Vector2.init(-0.5, 0.0),
-        Vector2.init(-0.3, 0.3),
-        Vector2.init(0.3, 0.3),
-        Vector2.init(0.5, 0.0),
-        Vector2.init(0.3, -0.3),
-        Vector2.init(-0.3, -0.3),
-        Vector2.init(-0.5, 0.0),
-        Vector2.init(0.5, 0.0),
-    }, false);
-
-    drawLines(pos, SCALE * scale, 0, &.{
-        Vector2.init(-0.2, -0.3),
-        Vector2.init(-0.1, -0.5),
-        Vector2.init(0.1, -0.5),
-        Vector2.init(0.2, -0.3),
-    }, false);
+    drawLines(pos, SCALE * scale, 0, &ALIEN_LINES_A, false);
+    drawLines(pos, SCALE * scale, 0, &ALIEN_LINES_B, false);
 }
 
 const SHIP_LINES = [_]Vector2{
@@ -700,13 +703,34 @@ const SHIP_LINES = [_]Vector2{
     Vector2.init(-0.3, -0.4),
 };
 
+const SHIP_LIVES = [_]Vector2{
+    Vector2.init(SCALE + (@as(f32, @floatFromInt(0)) * SCALE), SCALE),
+    Vector2.init(SCALE + (@as(f32, @floatFromInt(1)) * SCALE), SCALE),
+    Vector2.init(SCALE + (@as(f32, @floatFromInt(2)) * SCALE), SCALE),
+};
+
+const SHIP_THRUST = [_]Vector2{
+    Vector2.init(-0.3, -0.5),
+    Vector2.init(0.0, -0.8),
+    Vector2.init(0.3, -0.5),
+};
+
+const SCORE_POS = Vector2.init(SIZE.x - SCALE, SCALE);
+
+const PARTICLE_LINES = [_]Vector2{
+    Vector2.init(-0.5, 0),
+    Vector2.init(0.5, 0),
+};
+
+const SHIP_START_POSITION = SIZE.scale(0.5);
+
 fn render() !void {
     sdk.graphics.clear(.{ .color = .ColorBlack });
 
     // draw remaining lives
     for (0..state.lives) |i| {
         drawLines(
-            Vector2.init(SCALE + (@as(f32, @floatFromInt(i)) * SCALE), SCALE),
+            SHIP_LIVES[i],
             SCALE,
             -std.math.pi,
             &SHIP_LINES,
@@ -715,7 +739,7 @@ fn render() !void {
     }
 
     // draw score
-    try drawNumber(state.score, Vector2.init(SIZE.x - SCALE, SCALE));
+    try drawNumber(state.score, SCORE_POS);
 
     if (!state.ship.isDead()) {
         drawLines(
@@ -731,11 +755,7 @@ fn render() !void {
                 state.ship.pos,
                 SCALE,
                 state.ship.rot,
-                &.{
-                    Vector2.init(-0.3, -0.4),
-                    Vector2.init(0.0, -1.0),
-                    Vector2.init(0.3, -0.4),
-                },
+                &SHIP_THRUST,
                 true,
             );
         }
@@ -756,10 +776,7 @@ fn render() !void {
                     p.pos,
                     line.length,
                     line.rot,
-                    &.{
-                        Vector2.init(-0.5, 0),
-                        Vector2.init(0.5, 0),
-                    },
+                    &PARTICLE_LINES,
                     true,
                 );
             },
@@ -821,7 +838,7 @@ fn resetStage() !void {
 
     state.ship.deathTime = 0.0;
     state.ship = .{
-        .pos = SIZE.scale(0.5),
+        .pos = SHIP_START_POSITION,
         .vel = Vector2.init(0, 0),
         .rot = 0.0,
     };
@@ -854,7 +871,7 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
                 .playdate = playdate,
                 .game_state = .{
                     .ship = .{
-                        .pos = SIZE.scale(0.5),
+                        .pos = SHIP_START_POSITION,
                         .vel = Vector2.init(0, 0),
                         .rot = 0.0,
                     },
