@@ -1,6 +1,5 @@
 const std = @import("std");
 const rand = std.rand;
-const PlaydateAllocator = @import("memory.zig").PlaydateAllocator;
 const Playdate = @import("playdate-sdk").Playdate;
 const PlaydateSamplePlayer = @import("playdate-sdk").sound.PlaydateSamplePlayer;
 
@@ -459,27 +458,25 @@ fn update() !void {
     {
         var i: usize = 0;
         while (i < state.asteroids.items.len) {
-            var a = state.asteroids.items[i];
+            var a = &state.asteroids.items[i];
 
             math.add(&a.pos, a.vel);
             a.pos.x = @mod(a.pos.x, SIZE.x);
             a.pos.y = @mod(a.pos.y, SIZE.y);
-
-            state.asteroids.items[i] = a;
 
             const ship_velocity_unit = state.ship.vel.normalize();
 
             // check for ship v. asteroid collision
             if (!state.ship.isDead() and a.pos.distance(state.ship.pos) < a.size.size() * a.size.collisionScale()) {
                 state.ship.deathTime = state.now;
-                try hitAsteroid(&a, ship_velocity_unit);
+                try hitAsteroid(a, ship_velocity_unit);
             }
 
             // check for alien v. asteroid collision
             for (state.aliens.items) |*l| {
                 if (!l.remove and a.pos.distance(l.pos) < a.size.size() * a.size.collisionScale()) {
                     l.remove = true;
-                    try hitAsteroid(&a, ship_velocity_unit);
+                    try hitAsteroid(a, ship_velocity_unit);
                 }
             }
 
@@ -487,7 +484,7 @@ fn update() !void {
             for (state.projectiles.items) |*p| {
                 if (!p.remove and a.pos.distance(p.pos) < a.size.size() * a.size.collisionScale()) {
                     p.remove = true;
-                    try hitAsteroid(&a, p.vel.normalize());
+                    try hitAsteroid(a, p.vel.normalize());
                 }
             }
 
