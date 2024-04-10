@@ -340,9 +340,16 @@ fn splatDots(pos: Vector2, count: usize) !void {
     if (state.particles.items.len < MAX_PARTICLES) {
         for (0..count) |_| {
             const angle = std.math.tau * state.rand.float(f32);
+
+            var particle_pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3);
+            math.add(&particle_pos, pos);
+
+            var particle_velocity = Vector2.init(std.math.cos(angle), std.math.sin(angle));
+            math.scale(&particle_velocity, 2.0 + 4.0 * state.rand.float(f32));
+
             try state.addParticle(.{
-                .pos = Vector2.init(state.rand.float(f32) * 3, state.rand.float(f32) * 3).add(pos),
-                .vel = Vector2.init(std.math.cos(angle), std.math.sin(angle)).scale(2.0 + 4.0 * state.rand.float(f32)),
+                .pos = particle_pos,
+                .vel = particle_velocity,
                 .ttl = 0.5 + (0.4 * state.rand.float(f32)),
                 .values = .{
                     .DOT = .{
