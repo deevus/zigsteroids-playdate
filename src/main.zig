@@ -413,18 +413,18 @@ fn update() !void {
         const ROT_SPEED = 2;
         const SHIP_SPEED = 24;
 
-        if (sdk.system.isButtonDown(pdapi.BUTTON_LEFT)) {
+        if (sdk.system.isButtonDown(.ButtonLeft)) {
             state.ship.rot -= state.delta * std.math.tau * ROT_SPEED;
         }
 
-        if (sdk.system.isButtonDown(pdapi.BUTTON_RIGHT)) {
+        if (sdk.system.isButtonDown(.ButtonRight)) {
             state.ship.rot += state.delta * std.math.tau * ROT_SPEED;
         }
 
         const dirAngle = state.ship.rot + (std.math.pi * 0.5);
         var shipDir = Vector2.init(std.math.cos(dirAngle), std.math.sin(dirAngle));
 
-        if (sdk.system.isButtonDown(pdapi.BUTTON_UP)) {
+        if (sdk.system.isButtonDown(.ButtonUp)) {
             math.scale(&shipDir, state.delta * SHIP_SPEED);
             math.add(&shipDir, state.ship.vel);
 
@@ -441,7 +441,7 @@ fn update() !void {
         state.ship.pos.x = @mod(state.ship.pos.x, SIZE.x);
         state.ship.pos.y = @mod(state.ship.pos.y, SIZE.y);
 
-        if (sdk.system.isButtonPressed(pdapi.BUTTON_A)) {
+        if (sdk.system.isButtonPressed(.ButtonA)) {
             try state.addProjectile(.{
                 .pos = state.ship.pos.add(shipDir.scale(SCALE * 0.55)),
                 .vel = shipDir.scale(10.0),
@@ -633,7 +633,7 @@ fn update() !void {
         if (state.bloop % 2 == 1) {
             playSound(sound.bloopHi);
         } else {
-            sound.bloopLo.play();
+            playSound(sound.bloopLo);
         }
     }
     state.lastBloop = state.bloop;
@@ -750,7 +750,7 @@ fn render() !void {
             true,
         );
 
-        if (sdk.system.isButtonDown(pdapi.BUTTON_UP) and @mod(@as(i32, @intFromFloat(state.now * 20)), 2) == 0) {
+        if (sdk.system.isButtonDown(.ButtonUp) and @mod(@as(i32, @intFromFloat(state.now * 20)), 2) == 0) {
             drawLines(
                 state.ship.pos,
                 SCALE,
@@ -911,7 +911,7 @@ fn update_and_render(_: ?*anyopaque) callconv(.C) c_int {
 
     const previous_now = state.now;
     state.now = pd.system.getElapsedTime();
-    state.delta = pd.system.getElapsedTime() - previous_now;
+    state.delta = state.now - previous_now;
 
     update() catch @panic("Update failed");
 
