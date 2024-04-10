@@ -1,6 +1,7 @@
 const std = @import("std");
 const os_tag = @import("builtin").os.tag;
 const name = "Zigsteroids";
+const arm = std.Target.arm;
 
 pub fn build(b: *std.Build) !void {
     const pdx_file_name = name ++ ".pdx";
@@ -26,7 +27,8 @@ pub fn build(b: *std.Build) !void {
 
     const playdate_target = b.resolveTargetQuery(.{
         .cpu_arch = .thumb,
-        .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_m7 },
+        .cpu_model = .{ .explicit = &arm.cpu.cortex_m7 },
+        .cpu_features_add = arm.featureSet(&.{.vfp4d16sp}),
         .os_tag = .freestanding,
         .abi = .eabihf,
     });
