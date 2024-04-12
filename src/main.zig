@@ -11,7 +11,6 @@ const pdapi = @import("playdate_api_definitions.zig");
 
 var state: *State = undefined;
 var sound: *Sound = undefined;
-var pd: *pdapi.PlaydateAPI = undefined;
 var player: *pdapi.SamplePlayer = undefined;
 var sdk: Playdate = undefined;
 var arena: std.heap.ArenaAllocator = undefined;
@@ -176,18 +175,6 @@ const Sound = struct {
     asteroid: PlaydateSamplePlayer,
     explode: PlaydateSamplePlayer,
 };
-
-fn loadSample(file_path: [:0]const u8) !*pdapi.SamplePlayer {
-    const sample_player: *pdapi.SamplePlayer = pd.sound.sampleplayer.newPlayer().?;
-
-    if (pd.sound.sample.load(file_path.ptr)) |sample| {
-        _ = pd.sound.sampleplayer.setSample(sample_player, sample);
-    } else {
-        return error.SoundSampleFileNotFound;
-    }
-
-    return sample_player;
-}
 
 fn playSound(s: PlaydateSamplePlayer) void {
     s.play();
@@ -867,8 +854,6 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
             var prng = rand.Xoshiro256.init(playdate.system.getCurrentTimeMilliseconds());
             const global_state: *GlobalState = allocator.create(GlobalState) catch unreachable;
 
-            pd = playdate;
-
             global_state.* = .{
                 .playdate = playdate,
                 .game_state = .{
@@ -911,8 +896,7 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
 fn update_and_render(_: ?*anyopaque) callconv(.C) c_int {
     state.frame += 1;
 
-    const elapsed_ms: f32 = @floatFromInt(pd.system.getCurrentTimeMilliseconds());
-    const elapsed_seconds: f32 = elapsed_ms / 1000.0;
+    const elapsed_seconds: f32 = sdk.system.getElapsedTime();
 
     const previous_now = state.now;
     state.now = elapsed_seconds;
