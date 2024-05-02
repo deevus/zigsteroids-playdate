@@ -5,13 +5,11 @@ const PlaydateSamplePlayer = @import("playdate-sdk").sound.PlaydateSamplePlayer;
 
 const math = @import("playdate-sdk").math;
 const Vector2 = math.Vector2;
-const Vector2i = math.Vector2i;
 
 const pdapi = @import("playdate_api_definitions.zig");
 
 var state: *State = undefined;
 var sound: *Sound = undefined;
-var player: *pdapi.SamplePlayer = undefined;
 var sdk: Playdate = undefined;
 var arena: std.heap.ArenaAllocator = undefined;
 var allocator: std.mem.Allocator = undefined;
@@ -399,8 +397,8 @@ fn update() !void {
 
     if (!state.ship.isDead()) {
         // rotations / second
-        const ROT_SPEED = 2;
-        const SHIP_SPEED = 24;
+        const ROT_SPEED = 1.0;
+        const SHIP_SPEED = 24.0;
 
         if (sdk.system.isButtonDown(.ButtonLeft)) {
             state.ship.rot -= state.delta * std.math.tau * ROT_SPEED;
@@ -837,7 +835,6 @@ const GlobalState = struct {
     playdate: *pdapi.PlaydateAPI,
     game_state: State,
     sound: Sound,
-    sound_player: *pdapi.SamplePlayer,
 };
 
 pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEvent, arg: u32) callconv(.C) c_int {
@@ -869,7 +866,6 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
                     .aliens = std.ArrayList(Alien).init(allocator),
                     .rand = prng.random(),
                 },
-                .sound_player = playdate.sound.sampleplayer.newPlayer().?,
                 .sound = .{
                     .bloopLo = sdk.sound.loadSample("bloop_lo.wav"),
                     .bloopHi = sdk.sound.loadSample("bloop_hi.wav"),
@@ -882,9 +878,10 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
 
             sound = &global_state.sound;
             state = &global_state.game_state;
-            player = global_state.sound_player;
 
             resetGame() catch @panic("Failed to reset game");
+
+            _ = playdate.system.addMenuItem("Invert", invertMenuItemSelected, global_state);
 
             playdate.display.setRefreshRate(50);
             playdate.system.setUpdateCallback(update_and_render, global_state);
@@ -892,6 +889,20 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
         else => {},
     }
     return 0;
+}
+
+var inverted: bool = false;
+
+fn invertMenuItemSelected(data: ?*anyopaque) callconv(.C) void {
+    const global_state: *GlobalState = @alignCast(@ptrCast(data));
+
+    var new_inverted: c_int = 1;
+    if (inverted) {
+        new_inverted = 0;
+    }
+    inverted = new_inverted > 0;
+
+    global_state.playdate.display.setInverted(new_inverted);
 }
 
 fn update_and_render(_: ?*anyopaque) callconv(.C) c_int {
