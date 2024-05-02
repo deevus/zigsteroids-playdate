@@ -886,6 +886,7 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
 
             resetGame() catch @panic("Failed to reset game");
 
+            playdate.display.setRefreshRate(50);
             playdate.system.setUpdateCallback(update_and_render, global_state);
         },
         else => {},
