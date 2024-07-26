@@ -17,7 +17,7 @@
     .dependencies = .{
         .@"playdate-sdk" = .{
             .url = "https://github.com/deevus/Zig-Playdate-SDK/archive/refs/heads/main.tar.gz",
-            .hash = "12206e86a263ab4226ab58f3ec0652195880266f8d8a740eedd63f2f0018d33f4874",
+            .hash = "122000dd56b7027e08da2abcddf6f43810391ec4b428491cc6fb5f53c6025d203b18",
         },
     },
     .paths = .{

@@ -11,9 +11,11 @@ pub fn build(b: *std.Build) !void {
     const source_dir = writer.getDirectory();
     writer.step.name = "write source directory";
 
+    const main_path = b.path("src/main.zig");
+
     const lib = b.addSharedLibrary(.{
         .name = "pdex",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = main_path,
         .optimize = optimize,
         .target = b.host,
     });
@@ -35,7 +37,7 @@ pub fn build(b: *std.Build) !void {
 
     const elf = b.addExecutable(.{
         .name = "pdex.elf",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = main_path,
         .target = playdate_target,
         .optimize = optimize,
         .pic = true,
@@ -43,7 +45,7 @@ pub fn build(b: *std.Build) !void {
     elf.link_emit_relocs = true;
     elf.entry = .{ .symbol_name = "eventHandler" };
 
-    elf.setLinkerScriptPath(.{ .path = "link_map.ld" });
+    elf.setLinkerScriptPath(b.path("link_map.ld"));
 
     const playdate_dep = b.dependency("playdate-sdk", .{});
 
@@ -112,7 +114,7 @@ pub fn addCopyDirectory(
     while (try it.next()) |entry| {
         const new_src_path = b.pathJoin(&.{ src_path, entry.name });
         const new_dest_path = b.pathJoin(&.{ dest_path, entry.name });
-        const new_src = .{ .path = new_src_path };
+        const new_src = b.path(new_src_path);
         switch (entry.kind) {
             .file => {
                 _ = wf.addCopyFile(new_src, new_dest_path);
