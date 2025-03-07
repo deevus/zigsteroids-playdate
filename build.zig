@@ -6,6 +6,7 @@ const arm = std.Target.arm;
 pub fn build(b: *std.Build) !void {
     const pdx_file_name = name ++ ".pdx";
     const optimize = b.standardOptimizeOption(.{});
+    const target = b.standardTargetOptions(.{});
 
     const writer = b.addWriteFiles();
     const source_dir = writer.getDirectory();
@@ -17,7 +18,7 @@ pub fn build(b: *std.Build) !void {
         .name = "pdex",
         .root_source_file = main_path,
         .optimize = optimize,
-        .target = b.host,
+        .target = target,
     });
 
     _ = writer.addCopyFile(lib.getEmittedBin(), "pdex" ++ switch (os_tag) {
@@ -44,10 +45,9 @@ pub fn build(b: *std.Build) !void {
     });
     elf.link_emit_relocs = true;
     elf.entry = .{ .symbol_name = "eventHandler" };
+    elf.linker_script = b.path("link_map.ld");
 
-    elf.setLinkerScriptPath(b.path("link_map.ld"));
-
-    const playdate_dep = b.dependency("playdate-sdk", .{});
+    const playdate_dep = b.dependency("playdate_sdk", .{});
 
     lib.root_module.addImport("playdate-sdk", playdate_dep.module("playdate"));
     elf.root_module.addImport("playdate-sdk", playdate_dep.module("playdate"));
@@ -71,7 +71,7 @@ pub fn build(b: *std.Build) !void {
     };
 
     const pdc = b.addSystemCommand(&.{pdc_path});
-    pdc.addDirectorySourceArg(source_dir);
+    pdc.addDirectoryArg(source_dir);
     pdc.setName("pdc");
     const pdx = pdc.addOutputFileArg(pdx_file_name);
 
@@ -87,7 +87,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     const run_cmd = b.addSystemCommand(&.{pd_simulator_path});
-    run_cmd.addDirectorySourceArg(pdx);
+    run_cmd.addDirectoryArg(pdx);
     run_cmd.setName("PlaydateSimulator");
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
@@ -95,8 +95,8 @@ pub fn build(b: *std.Build) !void {
 
     const clean_step = b.step("clean", "Clean all artifacts");
     clean_step.dependOn(b.getUninstallStep());
-    clean_step.dependOn(&b.addRemoveDirTree("zig-cache").step);
-    clean_step.dependOn(&b.addRemoveDirTree("zig-out").step);
+    clean_step.dependOn(&b.addRemoveDirTree(b.path("zig-cache")).step);
+    clean_step.dependOn(&b.addRemoveDirTree(b.path("zig-out")).step);
 }
 
 pub fn addCopyDirectory(

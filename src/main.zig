@@ -1,5 +1,5 @@
 const std = @import("std");
-const rand = std.rand;
+const Random = std.Random;
 const Playdate = @import("playdate-sdk").Playdate;
 const PlaydateSamplePlayer = @import("playdate-sdk").sound.PlaydateSamplePlayer;
 
@@ -130,7 +130,7 @@ const State = struct {
     particles: std.ArrayList(Particle),
     projectiles: std.ArrayList(Projectile),
     aliens: std.ArrayList(Alien),
-    rand: rand.Random,
+    rand: Random,
     lives: usize = 0,
     lastScore: usize = 0,
     score: usize = 0,
@@ -283,7 +283,7 @@ const AsteroidSize = enum {
 };
 
 fn drawAsteroid(pos: Vector2, size: AsteroidSize, seed: u64) !void {
-    var prng = rand.Xoshiro256.init(seed);
+    var prng = Random.Xoshiro256.init(seed);
     var random = prng.random();
 
     var points = try std.BoundedArray(Vector2, 16).init(0);
@@ -848,7 +848,7 @@ pub export fn eventHandler(playdate: *pdapi.PlaydateAPI, event: pdapi.PDSystemEv
             arena = std.heap.ArenaAllocator.init(fba.allocator());
             allocator = arena.allocator();
 
-            var prng = rand.Xoshiro256.init(playdate.system.getCurrentTimeMilliseconds());
+            var prng = Random.Xoshiro256.init(playdate.system.getCurrentTimeMilliseconds());
             const global_state: *GlobalState = allocator.create(GlobalState) catch unreachable;
 
             global_state.* = .{
@@ -942,8 +942,6 @@ fn update_and_render(_: ?*anyopaque) callconv(.C) c_int {
 ///
 pub fn panic(msg: []const u8, error_ret_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     const self = sdk.system;
-
-    @setCold(true);
 
     const num_addrs = (if (error_ret_trace) |trace| trace.index else 0) + 1;
     const chars_per_addr = 1 + @bitSizeOf(usize) / 4;

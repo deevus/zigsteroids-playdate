@@ -1,36 +1,12 @@
 .{
-    .name = "zigsteroids-playdate",
-    // This is a [Semantic Version](https://semver.org/).
-    // In a future version of Zig it will be used for package deduplication.
+    .name = .zigsteroids_playdate,
+    .fingerprint = 0xf2ff4ee5f7cf2b6c,
     .version = "0.0.0",
-
-    // This field is optional.
-    // This is currently advisory only; Zig does not yet do anything
-    // with this value.
-    //.minimum_zig_version = "0.11.0",
-
-    // This field is optional.
-    // Each dependency must either provide a `url` and `hash`, or a `path`.
-    // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
-    // Once all dependencies are fetched, `zig build` no longer requires
-    // internet connectivity.
     .dependencies = .{
-        .@"playdate-sdk" = .{
-            .url = "https://github.com/deevus/Zig-Playdate-SDK/archive/refs/heads/main.tar.gz",
-            .hash = "122000dd56b7027e08da2abcddf6f43810391ec4b428491cc6fb5f53c6025d203b18",
+        .playdate_sdk = .{
+            .url = "git+https://github.com/deevus/zig-playdate-sdk.git#49925e34d84a858f842dc880be969079e7062742",
+            .hash = "playdate_sdk-0.0.1-dSGUUdJ7BwAKpuPDaSCd7AXGVBigkrrqXJ6EXWqTb9-X",
         },
     },
-    .paths = .{
-        // This makes *all* files, recursively, included in this package. It is generally
-        // better to explicitly list the files and directories instead, to insure that
-        // fetching from tarballs, file system paths, and version control all result
-        // in the same contents hash.
-        "",
-        // For example...
-        //"build.zig",
-        //"build.zig.zon",
-        //"src",
-        //"LICENSE",
-        //"README.md",
-    },
+    .paths = .{""},
 }
